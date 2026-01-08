@@ -5,70 +5,84 @@ const socketIO = require('socket.io');
 const cors = require('cors');
 const connectDB = require('./config/db');
 
-// Import routes
 const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/session');
 const pollRoutes = require('./routes/poll');
 const voteRoutes = require('./routes/vote');
 
-// Import models
 const Poll = require('./models/Poll');
 const Session = require('./models/Session');
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS Configuration - UPDATED
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.CLIENT_URL,
-  'https://your-app-name.netlify.app' // Will update this later
-];
+  'https://polling-app-ms7295.netlify.app',
+  'https://695eca117d8d5a0008fa7eda--polling-app-ms7295.netlify.app', // Netlify preview URL
+  process.env.CLIENT_URL
+].filter(Boolean);
+
 const io = socketIO(server, {
   cors: {
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
+        console.log('❌ CORS blocked origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
   }
 });
 
-// Connect Database FIRST
+// Connect Database
 connectDB();
 
-// Middleware - MUST come before routes
+// Middleware - UPDATED CORS
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log('❌ CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
+// Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log('Origin:', req.headers.origin);
   next();
 });
 
-// Health check route
+// Health check
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Polling API is running',
     status: 'OK',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    allowedOrigins: allowedOrigins
   });
 });
 
-// API Routes - IMPORTANT: These must come AFTER middleware
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/session', sessionRoutes);
 app.use('/api/poll', pollRoutes);
@@ -83,7 +97,7 @@ app.use((req, res) => {
   });
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err);
   res.status(500).json({ 
@@ -165,5 +179,5 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS enabled for: ${process.env.CLIENT_URL || 'http://localhost:3000'}`);
+  console.log(`🌐 Allowed origins:`, allowedOrigins);
 });
